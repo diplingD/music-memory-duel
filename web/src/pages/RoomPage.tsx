@@ -3,6 +3,7 @@ import {
   createRoom,
   joinRoom,
   onErrorOccurred,
+  onMatchEnded,
   onMatchStarted,
   onNotePlayed,
   onPlayerListChanged,
@@ -13,7 +14,7 @@ import {
   submitAnswer,
   submitSequence,
 } from '../api/gameHub'
-import type { NoteEvent, PlayerDto, RoundEndedDto } from '../models/contracts'
+import type { NoteEvent, PlayerDto, RoundEndedDto, StandingDto } from '../models/contracts'
 import { SequenceCapture } from '../services/capture'
 import { playNote } from '../services/synth'
 import Lobby from '../components/Lobby'
@@ -21,8 +22,9 @@ import Keyboard from '../components/Keyboard'
 import PhaseBanner from '../components/PhaseBanner'
 import Countdown from '../components/Countdown'
 import PianoRoll from '../components/PianoRoll'
+import Scoreboard from '../components/Scoreboard'
 
-type Phase = 'lobby' | 'composing' | 'solving' | 'roundResult'
+type Phase = 'lobby' | 'composing' | 'solving' | 'roundResult' | 'matchOver'
 
 export default function RoomPage() {
   const [roomCode, setRoomCode] = useState<string | null>(null)
@@ -30,23 +32,27 @@ export default function RoomPage() {
   const [players, setPlayers] = useState<PlayerDto[]>([])
   const [phase, setPhase] = useState<Phase>('lobby')
   const [composeDeadline, setComposeDeadline] = useState<number | null>(null)
+  const [composerId, setComposerId] = useState<string | null>(null)
   const [liveNotes, setLiveNotes] = useState<NoteEvent[]>([])
   const [solveDeadline, setSolveDeadline] = useState<number | null>(null)
   const [roundId, setRoundId] = useState<string | null>(null)
   const [answered, setAnswered] = useState(false)
   const [lastRoundResult, setLastRoundResult] = useState<RoundEndedDto | null>(null)
+  const [finalStandings, setFinalStandings] = useState<StandingDto[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const captureRef = useRef(new SequenceCapture())
   const answerCaptureRef = useRef(new SequenceCapture())
 
   const isHost = players.some((p) => p.id === playerId && p.isHost)
+  const isComposer = composerId !== null && composerId === playerId
 
   useEffect(() => {   // this is called only once, on first build
     onPlayerListChanged(setPlayers).catch((err) => setError((err as Error).message))
-    onMatchStarted((deadline) => {
+    onMatchStarted((deadline, newComposerId) => {
       captureRef.current.reset()
       setLiveNotes([])
       setComposeDeadline(deadline)
+      setComposerId(newComposerId)
       setPhase('composing')
     }).catch((err) => setError((err as Error).message))
     onNotePlayed((note) => {
@@ -63,6 +69,10 @@ export default function RoomPage() {
     onRoundEnded((dto) => {
       setLastRoundResult(dto)
       setPhase('roundResult')
+    }).catch((err) => setError((err as Error).message))
+    onMatchEnded((standings) => {
+      setFinalStandings(standings)
+      setPhase('matchOver')
     }).catch((err) => setError((err as Error).message))
     onErrorOccurred((_code, message) => setError(message)).catch((err) =>
       setError((err as Error).message),
@@ -177,17 +187,27 @@ export default function RoomPage() {
 
       {phase === 'composing' && composeDeadline !== null && (
         <div className="flex w-full max-w-2xl flex-col items-center gap-4">
-          <PhaseBanner text="COMPOSE THE MELODY" />
+          <PhaseBanner
+            text={isComposer ? 'COMPOSE THE MELODY' : 'LISTEN TO THE MELODY'}
+          />
           <Countdown deadlineUnixMs={composeDeadline} />
           <PianoRoll notes={liveNotes} />
-          <Keyboard onPress={handleKeyPress} />
-          <button
-            type="button"
-            onClick={handleSubmit}
-            className="pixel-button pixel-button--accent px-4 py-3 text-[0.6rem]"
-          >
-            SUBMIT
-          </button>
+          {isComposer ? (
+            <>
+              <Keyboard onPress={handleKeyPress} />
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="pixel-button pixel-button--accent px-4 py-3 text-[0.6rem]"
+              >
+                SUBMIT
+              </button>
+            </>
+          ) : (
+            <div className="font-display text-[0.6rem] text-ink-soft">
+              {players.find((p) => p.id === composerId)?.nick ?? 'SOMEONE'} IS COMPOSING...
+            </div>
+          )}
         </div>
       )}
 
@@ -234,7 +254,7 @@ export default function RoomPage() {
 
           <div className="pixel-panel flex w-full flex-col gap-3 px-4 py-3">
             <div className="font-display text-[0.6rem] text-note-b">
-              creator {lastRoundResult.creatorConfirmed ? 'confirmed' : 'did not confirm'}
+              composer {lastRoundResult.composerConfirmed ? 'confirmed' : 'did not confirm'}
             </div>
             {lastRoundResult.standings.map((s) => (
               <div key={s.playerId} className="flex items-center justify-between text-xl">
@@ -245,6 +265,13 @@ export default function RoomPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {phase === 'matchOver' && finalStandings && (
+        <div className="flex w-full max-w-2xl flex-col items-center gap-4">
+          <PhaseBanner text="MATCH OVER" />
+          <Scoreboard standings={finalStandings} />
         </div>
       )}
 

@@ -7,9 +7,10 @@ namespace Server.Hubs;
 public interface IGameClient
 {
     Task PlayerListChanged(PlayerDto[] players);
-    Task MatchStarted(long composeDeadlineUnixMs);
+    Task MatchStarted(long composeDeadlineUnixMs, string composerId);
     Task NotePlayed(NoteEvent note);
     Task SolvingStarted(Guid roundId, long solveDeadlineUnixMs);
     Task RoundEnded(RoundEndedDto dto);
+    Task MatchEnded(StandingDto[] finalStandings);
     Task ErrorOccurred(string code, string message);
 }

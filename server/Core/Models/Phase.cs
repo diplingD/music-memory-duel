@@ -6,4 +6,5 @@ public enum Phase
     Composing,
     Solving,
     RoundResult,
+    MatchOver,
 }

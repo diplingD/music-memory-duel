@@ -10,7 +10,7 @@ public sealed record ErrorOccurred(string Code, string Message) : Effect;
 
 public sealed record ScheduleEffect(DateTime WakeAtUtc, GameEvent EventToRaise) : Effect;
 
-public sealed record MatchStartedEffect(DateTime ComposeDeadlineUtc) : Effect;
+public sealed record MatchStartedEffect(DateTime ComposeDeadlineUtc, string ComposerId) : Effect;
 
 public sealed record NotePlayedEffect(string ConnectionId, NoteEvent Note) : Effect;
 
@@ -18,8 +18,10 @@ public sealed record SolvingStartedEffect(Guid RoundId, DateTime SolveDeadlineUt
 
 public sealed record RoundEndedEffect(
     Guid RoundId,
-    string CreatorId,
-    bool CreatorConfirmed,
+    string ComposerId,
+    bool ComposerConfirmed,
     IReadOnlyList<PlayerRoundResult> Results,
     IReadOnlyList<Player> Players,
     DateTime ResultDisplayDeadlineUtc) : Effect;
+
+public sealed record MatchEndedEffect(IReadOnlyList<Player> Players) : Effect;

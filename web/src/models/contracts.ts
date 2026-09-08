@@ -36,8 +36,8 @@ export interface StandingDto {
 
 export interface RoundEndedDto {
   roundId: string
-  creatorId: string
-  creatorConfirmed: boolean
+  composerId: string
+  composerConfirmed: boolean
   results: PlayerRoundResultDto[]
   standings: StandingDto[]
   resultDisplayDeadlineUnixMs: number

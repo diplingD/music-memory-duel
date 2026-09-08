@@ -24,8 +24,8 @@ public static class Reducer
             case AnswerSubmitted answerSubmitted:
                 return HandleAnswerSubmitted(state, answerSubmitted, utcNow);
 
-            case SolveDeadlineReached:
-                return HandleSolveDeadlineReached(state, utcNow);
+            case SolveDeadlineReached solveDeadlineReached:
+                return HandleSolveDeadlineReached(state, solveDeadlineReached, utcNow);
 
             case ResultDisplayFinished:
                 return HandleResultDisplayFinished(state, utcNow);
@@ -57,25 +57,31 @@ public static class Reducer
         if (state.Players.Count < GameConstants.MinPlayers)
             return (state, [new ErrorOccurred("not_enough_players", "You need at least 2 players to start.")]);
 
-        return EnterComposing(state, utcNow);
+        var totalRounds = state.Players.Count * GameConstants.RoundsPerPlayer;
+        return EnterComposing(state with { TotalRounds = totalRounds }, utcNow);
     }
 
-    // Shared by the very first round (from Lobby) and every round after the first
-    // (from RoundResult) — same "open a fresh Composing window" effects either way.
+    // Shared by the very first round (from Lobby) and every round after the RoundResult phase
     private static (GameState, IReadOnlyList<Effect>) EnterComposing(GameState state, DateTime utcNow)
     {
+        var composerId = CurrentComposerId(state);
         var deadline = utcNow.AddMilliseconds(GameConstants.ComposeMaxMs);
         var updatedState = state with { Phase = Phase.Composing };
         List<Effect> effects =
         [
-            new MatchStartedEffect(deadline),
+            new MatchStartedEffect(deadline, composerId),
             new ScheduleEffect(deadline, new ComposeDeadlineReached()),
         ];
 
         return (updatedState, effects);
     }
 
-    // Live broadcast while the creator is composing — doesn't change state, just relays
+    // Round-robin by join order — Players is fixed for the whole match (no joins after Lobby).
+    // Moduo here is not necessary, since we already do it in HandleResultDisplayFinished below
+    private static string CurrentComposerId(GameState state) =>
+        state.Players[state.ComposerIndex % state.Players.Count].Id;
+
+    // Live broadcast while the composer is composing — doesn't change state, just relays
     // the note to everyone else in the room so they can hear/see it as it's played.
     private static (GameState, IReadOnlyList<Effect>) HandleNotePlayed(GameState state, NotePlayed evt)
     {
@@ -93,11 +99,15 @@ public static class Reducer
         if (state.Phase != Phase.Composing)
             return (state, []);
 
-        // first note is always tMs = 0, so the last note's tMs is how long the creator actually took.
-        var creatorDurationMs = evt.Notes.Count > 0 ? evt.Notes.Max(n => n.TMs) : 0;
+        var composerId = CurrentComposerId(state);
+        if (evt.PlayerId != composerId)
+            return (state, [new ErrorOccurred("not_your_turn", "Only the current composer can submit the sequence.")]);
+
+        // first note is always tMs = 0, so the last note's tMs is how long the composer actually took.
+        var composerDurationMs = evt.Notes.Count > 0 ? evt.Notes.Max(n => n.TMs) : 0;
         var solveMs = GameConstants.SolveMaxMs;     // temporary for dev phase
         //var solveMs = Math.Clamp(
-        //    creatorDurationMs * GameConstants.SolveMultiplier,
+        //    composerDurationMs * GameConstants.SolveMultiplier,
         //    GameConstants.SolveMinMs,
         //    GameConstants.SolveMaxMs);
         var solveDeadline = utcNow.AddMilliseconds(solveMs);
@@ -105,7 +115,7 @@ public static class Reducer
         var round = new Round
         {
             RoundId = Guid.NewGuid(),
-            CreatorId = evt.PlayerId,
+            ComposerId = composerId,
             TargetNotes = evt.Notes,
             Answers = new Dictionary<string, IReadOnlyList<NoteEvent>>(),
         };
@@ -114,7 +124,7 @@ public static class Reducer
         List<Effect> effects =
         [
             new SolvingStartedEffect(round.RoundId, solveDeadline),
-            new ScheduleEffect(solveDeadline, new SolveDeadlineReached()),
+            new ScheduleEffect(solveDeadline, new SolveDeadlineReached(round.RoundId)),
         ];
 
         return (updatedState, effects);
@@ -140,17 +150,21 @@ public static class Reducer
         };
         var updatedState = state with { CurrentRound = round with { Answers = updatedAnswers } };
 
-        // creator + every solver have all answered -> close the round now, don't wait for the deadline
+        // composer + every solver have all answered -> close the round now, don't wait for the deadline
         if (updatedAnswers.Count == state.Players.Count)
             return CloseRound(updatedState, utcNow);
 
         return (updatedState, []);
     }
 
-    private static (GameState, IReadOnlyList<Effect>) HandleSolveDeadlineReached(GameState state, DateTime utcNow)
+    private static (GameState, IReadOnlyList<Effect>) HandleSolveDeadlineReached(
+        GameState state, SolveDeadlineReached evt, DateTime utcNow)
     {
         if (state.Phase != Phase.Solving || state.CurrentRound is null)
             return (state, []);
+
+        if (evt.RoundId != state.CurrentRound.RoundId)
+            return (state, []); // stale deadline from a round that already closed early
 
         return CloseRound(state, utcNow);
     }
@@ -160,30 +174,43 @@ public static class Reducer
         if (state.Phase != Phase.RoundResult)
             return (state, []);
 
-        return EnterComposing(state, utcNow);
+        if (state.RoundsPlayed >= state.TotalRounds)
+            return EnterMatchOver(state);
+
+        var nextIndex = (state.ComposerIndex + 1) % state.Players.Count;
+        var updatedState = state with { ComposerIndex = nextIndex };
+        return EnterComposing(updatedState, utcNow);
+    }
+
+    private static (GameState, IReadOnlyList<Effect>) EnterMatchOver(GameState state)
+    {
+        var updatedState = state with { Phase = Phase.MatchOver };
+        List<Effect> effects = [new MatchEndedEffect(state.Players)];
+
+        return (updatedState, effects);
     }
 
     // Shared by both ways a round can end: everyone answered early, or the deadline hit.
-    // Missing answers (creator or solver) are simply treated as "didn't submit" — timeout.
+    // Missing answers (composer or solver) are simply treated as "didn't submit" — timeout.
     private static (GameState, IReadOnlyList<Effect>) CloseRound(GameState state, DateTime utcNow)
     {
         var round = state.CurrentRound!;
 
-        var creatorAttempt = round.Answers.GetValueOrDefault(round.CreatorId);
-        var creatorConfirmed = creatorAttempt is not null
-            && NoteComparer.IsMatch(round.TargetNotes, creatorAttempt, GameConstants.RhythmTolerance);
+        var composerAttempt = round.Answers.GetValueOrDefault(round.ComposerId);
+        var composerConfirmed = composerAttempt is not null
+            && NoteComparer.IsMatch(round.TargetNotes, composerAttempt, GameConstants.RhythmTolerance);
 
-        var solverIds = state.Players.Select(p => p.Id).Where(id => id != round.CreatorId).ToArray();
+        var solverIds = state.Players.Select(p => p.Id).Where(id => id != round.ComposerId).ToArray();
         var solverCorrectness = solverIds.ToDictionary(
             id => id,
             id => round.Answers.TryGetValue(id, out var attempt)
                 && NoteComparer.IsMatch(round.TargetNotes, attempt, GameConstants.RhythmTolerance));
 
-        var (creatorPoints, solverPoints) = Scoring.Score(creatorConfirmed, solverCorrectness);
+        var (composerPoints, solverPoints) = Scoring.Score(composerConfirmed, solverCorrectness);
 
         var results = new List<PlayerRoundResult>
         {
-            BuildResult(round, round.CreatorId, creatorAttempt, creatorConfirmed, creatorPoints, GameConstants.RhythmTolerance),
+            BuildResult(round, round.ComposerId, composerAttempt, composerConfirmed, composerPoints, GameConstants.RhythmTolerance),
         };
         foreach (var id in solverIds)
         {
@@ -202,13 +229,17 @@ public static class Reducer
             })
             .ToList();
 
-        // Known temporary gap: no creator rotation yet (Korak 4) — ResultDisplayFinished
-        // always re-enters Composing with the same creator.
         var resultDisplayDeadline = utcNow.AddMilliseconds(GameConstants.ResultDisplayMs);
-        var updatedState = state with { Phase = Phase.RoundResult, Players = updatedPlayers, CurrentRound = null };
+        var updatedState = state with
+        {
+            Phase = Phase.RoundResult,
+            Players = updatedPlayers,
+            CurrentRound = null,
+            RoundsPlayed = state.RoundsPlayed + 1,
+        };
         List<Effect> effects =
         [
-            new RoundEndedEffect(round.RoundId, round.CreatorId, creatorConfirmed, results, updatedPlayers, resultDisplayDeadline),
+            new RoundEndedEffect(round.RoundId, round.ComposerId, composerConfirmed, results, updatedPlayers, resultDisplayDeadline),
             new ScheduleEffect(resultDisplayDeadline, new ResultDisplayFinished()),
         ];
 

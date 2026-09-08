@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Server.Core.DTOs;
 using Server.Core.Game;
+using Server.Core.Models;
 using Server.Hubs;
 
 namespace Server.Services;
@@ -29,6 +30,9 @@ public sealed class EffectExecutor(IHubContext<GameHub, IGameClient> hub, Schedu
 
             case RoundEndedEffect roundEnded:
                 return BroadcastRoundEnded(roundEnded, actor);
+
+            case MatchEndedEffect matchEnded:
+                return BroadcastMatchEnded(matchEnded, actor);
 
             case ScheduleEffect schedule:
                 return ScheduleWakeUp(schedule, actor);
@@ -61,7 +65,7 @@ public sealed class EffectExecutor(IHubContext<GameHub, IGameClient> hub, Schedu
     private Task BroadcastMatchStarted(MatchStartedEffect effect, RoomActor actor)
     {
         var deadlineMs = new DateTimeOffset(effect.ComposeDeadlineUtc).ToUnixTimeMilliseconds();
-        return hub.Clients.Group(actor.RoomCode).MatchStarted(deadlineMs);
+        return hub.Clients.Group(actor.RoomCode).MatchStarted(deadlineMs, effect.ComposerId);
     }
 
     // GroupExcept the sender — the player who played the note already heard it locally.
@@ -82,15 +86,22 @@ public sealed class EffectExecutor(IHubContext<GameHub, IGameClient> hub, Schedu
             .Select(r => new PlayerRoundResultDto(r.PlayerId, r.Submitted, r.Correct, r.PrefixRatio, r.PointsDelta, r.Reason))
             .ToArray();
 
-        // rank is 1-based, players sorted best-score-first
-        var standings = effect.Players
+        var standings = BuildStandings(effect.Players);
+
+        var resultDisplayDeadlineMs = new DateTimeOffset(effect.ResultDisplayDeadlineUtc).ToUnixTimeMilliseconds();
+        var dto = new RoundEndedDto(effect.RoundId, effect.ComposerId, effect.ComposerConfirmed, results, standings, resultDisplayDeadlineMs);
+        return hub.Clients.Group(actor.RoomCode).RoundEnded(dto);
+    }
+
+    private Task BroadcastMatchEnded(MatchEndedEffect effect, RoomActor actor)
+    {
+        return hub.Clients.Group(actor.RoomCode).MatchEnded(BuildStandings(effect.Players));
+    }
+
+    // rank is 1-based, players sorted best-score-first
+    private static StandingDto[] BuildStandings(IReadOnlyList<Player> players) =>
+        players
             .OrderByDescending(p => p.Score)
             .Select((player, rank) => new StandingDto(player.Id, player.Nick, player.Score, rank + 1))
             .ToArray();
-
-        var resultDisplayDeadlineMs = new DateTimeOffset(effect.ResultDisplayDeadlineUtc).ToUnixTimeMilliseconds();
-        var dto = new RoundEndedDto(
-            effect.RoundId, effect.CreatorId, effect.CreatorConfirmed, results, standings, resultDisplayDeadlineMs);
-        return hub.Clients.Group(actor.RoomCode).RoundEnded(dto);
-    }
 }

@@ -16,6 +16,6 @@ public sealed record NotePlayed(string PlayerId, string ConnectionId, NoteEvent 
 
 public sealed record AnswerSubmitted(string PlayerId, Guid RoundId, IReadOnlyList<NoteEvent> Notes) : GameEvent;
 
-public sealed record SolveDeadlineReached : GameEvent;
+public sealed record SolveDeadlineReached(Guid RoundId) : GameEvent;
 
 public sealed record ResultDisplayFinished : GameEvent;

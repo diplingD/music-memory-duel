@@ -5,6 +5,7 @@ import type {
   NoteEvent,
   PlayerDto,
   RoundEndedDto,
+  StandingDto,
 } from '../models/contracts'
 
 const HUB_URL = 'http://localhost:5149/hubs/game'
@@ -61,7 +62,7 @@ export async function sendNotePlayed(note: NoteEvent): Promise<void> {
   return conn.invoke<void>('PlayNote', note)
 }
 
-// submitted during Solving — by the creator (confirmation replay) or a solver (their attempt)
+// submitted during Solving — by the composer (confirmation replay) or a solver (their attempt)
 export async function submitAnswer(roundId: string, notes: NoteEvent[]): Promise<void> {
   const conn = await getConnection()
   return conn.invoke<void>('SubmitAnswer', roundId, notes)
@@ -79,7 +80,7 @@ export async function onPlayerListChanged(
 
 // triggers when 'MatchStarted' is sent from backend (Lobby -> Composing)
 export async function onMatchStarted(
-  callback: (composeDeadlineUnixMs: number) => void,    // matching: setComposeDeadline(deadline), from RoomPage.tsx;
+  callback: (composeDeadlineUnixMs: number, composerId: string) => void,
 ): Promise<void> {
   const conn = await getConnection()
   conn.on('MatchStarted', callback)
@@ -105,6 +106,14 @@ export async function onSolvingStarted(
 export async function onRoundEnded(callback: (dto: RoundEndedDto) => void): Promise<void> {
   const conn = await getConnection()
   conn.on('RoundEnded', callback)
+}
+
+// triggers when 'MatchEnded' is sent from backend (last round closed, final standings)
+export async function onMatchEnded(
+  callback: (finalStandings: StandingDto[]) => void,
+): Promise<void> {
+  const conn = await getConnection()
+  conn.on('MatchEnded', callback)
 }
 
 // triggers when 'ErrorOccurred' is sent from backend (e.g. not enough players to start)
