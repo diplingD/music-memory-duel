@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Music Memory Duel — Piano Keyboard komponenta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+/* =========================================================================
+   MUSIC MEMORY DUEL — PIANO KEYBOARD komponenta
+   Zamena za stari numerisani keybed (1–8). 8 belih dirki: C D E F G A B C.
+   Isti design-token sistem kao mmd-visual-style-final.html — kopirati te
+   varijable u globalne stilove ako već nisu tamo.
+   ========================================================================= */
+:root{
+  --bg-2:       #160821;
+  --bg-3:       #0B0414;
+  --panel:      #1F0E33;
+  --note-a:     #FF3E7A;
+  --note-b:     #3ADFC7;
+  --amber:      #FFC93C;
+  --ink:        #F4EEFF;
+  --ink-soft:   #B9A7E0;
+  --outline:    #000000;
+  --font-display: "Press Start 2P", monospace;
+  --font-mono:    "VT323", monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:var(--font-display);color:var(--ink);
+  background:radial-gradient(circle at 50% -10%,#2A1345,var(--bg-2) 55%),var(--bg-3);
+  padding:2.6rem 1.2rem 3rem; min-height:100vh;
+}
+.wrap{max-width:640px;margin:0 auto}
+.label{font-size:.6rem;color:var(--ink-soft);text-align:center;margin-bottom:1.6rem;line-height:1.9}
+
+/* =========================================================================
+   .keyboard — komponenta
+   8 dirki u redu. Svaka dirka:
+     - naziv note velikim slovom (C D E F G A B C)
+     - malo slovo ispod za tastaturni prečac (Z X C V B N M ,)
+     - :active / .pressed stanje utapa dirku 3px nadole (kao svako dugme
+       u ovom stilu) i menja boju u --note-a, imitirajući da je "pritisnuta"
+   Dirke NEMAJU border-radius — to je jedini rasterski/pixel stil koji
+   projekat koristi, uvek oštre ivice + tvrda pomerena senka.
+   ========================================================================= */
+.keyboard{
+  display:grid;grid-template-columns:repeat(8,1fr);gap:6px;
+}
+.wkey{
+  position:relative;
+  height:120px;
+  background:linear-gradient(180deg,#FBF9F4,#E9E6DE 78%,#D6D2C8);
+  border:3px solid var(--outline);
+  box-shadow:3px 3px 0 var(--outline);
+  display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
+  padding-bottom:.7rem;gap:.3rem;
+  cursor:pointer;user-select:none;
+  transition:transform .04s linear;
+}
+.wkey .note{
+  font-size:.78rem;color:var(--bg-3);
+}
+.wkey .shortcut{
+  font-family:var(--font-mono);font-size:1.1rem;color:var(--ink-soft);
+}
+
+/* pritisnuto / aktivno stanje — dirka se "utapa" i boji notom */
+.wkey:active,
+.wkey.pressed{
+  transform:translate(3px,3px);
+  box-shadow:0 0 0 var(--outline);
+  background:linear-gradient(180deg,#FFD9E5,#FF8FB4 78%,var(--note-a));
+}
+.wkey:active .note,
+.wkey.pressed .note{ color:var(--outline) }
+.wkey:active .shortcut,
+.wkey.pressed .shortcut{ color:#FFF0F5 }
+
+/* alternirajuća akcentna linija na vrhu svake dirke — čisto dekorativno,
+   razdvaja dirke istim vizuelnim jezikom kao note na piano roll-u */
+.wkey::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:5px;
+  background:var(--note-b);
+}
+.wkey:nth-child(even)::before{ background:var(--note-a) }
+.wkey:active::before,
+.wkey.pressed::before{ background:var(--amber) }
+
+.wkey:focus-visible{ outline:3px solid var(--amber); outline-offset:2px }
+
+.legend{
+  margin-top:2rem;font-family:var(--font-mono);font-size:1rem;color:var(--ink-soft);
+  text-align:center;line-height:1.7;
+}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="label">KLIK ILI TASTERI Z X C V B N M ,</p>
+
+    <div class="keyboard" id="keyboard">
+      <div class="wkey" tabindex="0" data-pitch="C4"><span class="note">C</span><span class="shortcut">Z</span></div>
+      <div class="wkey" tabindex="0" data-pitch="D4"><span class="note">D</span><span class="shortcut">X</span></div>
+      <div class="wkey" tabindex="0" data-pitch="E4"><span class="note">E</span><span class="shortcut">C</span></div>
+      <div class="wkey" tabindex="0" data-pitch="F4"><span class="note">F</span><span class="shortcut">V</span></div>
+      <div class="wkey" tabindex="0" data-pitch="G4"><span class="note">G</span><span class="shortcut">B</span></div>
+      <div class="wkey" tabindex="0" data-pitch="A4"><span class="note">A</span><span class="shortcut">N</span></div>
+      <div class="wkey" tabindex="0" data-pitch="B4"><span class="note">B</span><span class="shortcut">M</span></div>
+      <div class="wkey" tabindex="0" data-pitch="C5"><span class="note">C</span><span class="shortcut">,</span></div>
+    </div>
+
+    <p class="legend">— demo: klik na dirku ostavlja "pressed" stanje 110ms —</p>
+  </div>
+
+<script>
+/* Demonstracioni JS — samo za ovaj mockup, da se stanje "pressed" vidi.
+   U pravoj komponenti ovo poziva Tone.js i beleži {pitch, tMs}. */
+document.getElementById("keyboard").addEventListener("pointerdown", e => {
+  const key = e.target.closest(".wkey");
+  if(!key) return;
+  key.classList.add("pressed");
+  setTimeout(() => key.classList.remove("pressed"), 110);
+});
+const shortcuts = ["z","x","c","v","b","n","m",","];
+addEventListener("keydown", e => {
+  const i = shortcuts.indexOf(e.key.toLowerCase());
+  if(i<0) return;
+  const key = document.querySelectorAll(".wkey")[i];
+  key.classList.add("pressed");
+  setTimeout(() => key.classList.remove("pressed"), 110);
+});
+</script>
+</body>
+</html>

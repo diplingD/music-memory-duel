@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Music Memory Duel — vizuelni pravac (final)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+/* =========================================================================
+   MUSIC MEMORY DUEL — DESIGN TOKENS
+   8-bit arkadni šalter / CRT monitor. Reference za implementaciju u web/.
+   ========================================================================= */
+:root{
+  --bg-1:       #2A1345;   /* gornji sjaj pozadine (radial highlight) */
+  --bg-2:       #160821;   /* osnovna pozadina */
+  --bg-3:       #0B0414;   /* najtamniji sloj pozadine */
+
+  --panel:      #1F0E33;   /* CRT kućište, tastature, kartice igrača */
+  --screen:     #050308;   /* unutrašnjost ekrana (iza note-a) */
+
+  --note-a:     #FF3E7A;   /* magenta — primarna nota / naslovni sjaj */
+  --note-b:     #3ADFC7;   /* cijan — sekundarna nota / naslovni sjaj */
+  --amber:      #FFC93C;   /* kursor, brojevi poena, akcenti */
+
+  --ink:        #F4EEFF;   /* primarni tekst */
+  --ink-soft:   #B9A7E0;   /* podnaslovi, sekundarni tekst */
+
+  --outline:    #000000;   /* tvrda 3px ivica na svemu — bez blur senki */
+
+  --font-display: "Press Start 2P", monospace;   /* naslov, brojevi, labele */
+  --font-mono:    "VT323", monospace;            /* opciono: duži tekst, ako treba čitljiviji pixel font */
+}
+
+/* -------------------------------------------------------------------------
+   PRINCIPI STILA (za implementaciju izvan ovog fajla):
+   1. Nema border-radius nigde. Sve ivice su oštre.
+   2. Senke su UVEK tvrde pomerene ivice (npr. box-shadow: 3px 3px 0 #000),
+      nikad blur/gradient senka. To je ono što čini "pixel" osećaj.
+   3. image-rendering: pixelated na svim rasterskim elementima ako se
+      koriste bitmap sprajtovi umesto CSS oblika.
+   4. Scanline overlay (repeating-linear-gradient, 2px pruge, blend overlay)
+      ide preko SVAKOG "screen" elementa — piano roll, rezultat runde, itd.
+      To je jedini stalno-animirani/vizuelni potpis ekrana; ne dodavati
+      druge dekorativne efekte.
+   5. Naslov ima dupli tvrdi tekst-senka offset (magenta levo-dole,
+      cijan desno-gore) — to je signature element, ne ponavljati ga
+      na drugim naslovima u aplikaciji (samo na glavnom logotipu/naslovu).
+   6. Font Press Start 2P je NAMERNO sitan i redak — koristi se za brojeve,
+      naslove, labele. Za bilo kakav duži opisni tekst (npr. threat model
+      tekst u UI-ju, ako ga ima) koristiti VT323 ili sličan čitljiviji
+      monospace, jer je Press Start 2P nečitljiv u pasusima.
+   7. Note na piano roll-u su blokovi bez zaobljenja, naizmenično
+      --note-a / --note-b da bi susedne note bile vizuelno razdvojene.
+   8. Kursor (linija trenutnog vremena na roll-u) je --amber, širina 3px,
+      sa dvostrukom ivicom (crni okvir + spoljni glow).
+   ------------------------------------------------------------------------- */
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:var(--font-display);
+  color:var(--ink);
+  background:
+    radial-gradient(circle at 50% -10%, var(--bg-1), var(--bg-2) 55%),
+    var(--bg-3);
+  padding:2.4rem 1.2rem 3rem;
+  image-rendering:pixelated;
+  min-height:100vh;
+}
+.frame{max-width:780px;margin:0 auto}
+
+.top{
+  display:flex;justify-content:space-between;align-items:flex-end;
+  margin-bottom:1.6rem;font-size:.6rem;line-height:1.9;
+}
+.top .room{color:var(--note-b)}
+.top .score{text-align:right;color:var(--amber)}
+
+h1{
+  font-size:clamp(1.05rem,3.4vw,1.6rem);letter-spacing:.02em;
+  text-align:center;margin-bottom:.35rem;
+  text-shadow:3px 3px 0 var(--note-a), -3px -3px 0 var(--note-b);
+}
+.sub{
+  text-align:center;font-size:.58rem;color:var(--ink-soft);
+  margin-bottom:1.7rem;line-height:1.8;
+}
+
+.crt{
+  position:relative;background:var(--panel);
+  border:6px solid var(--panel);
+  box-shadow:0 0 0 3px var(--outline), inset 0 0 0 3px var(--outline), 0 10px 0 var(--outline);
+  padding:14px;
+}
+.screen{
+  position:relative;height:200px;background:var(--screen);overflow:hidden;
+}
+.screen::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(180deg,rgba(255,255,255,.05) 0 2px,transparent 2px 4px);
+  mix-blend-mode:overlay;
+}
+.lane{
+  position:absolute;left:0;right:0;height:12.5%;
+  border-top:1px dashed rgba(255,255,255,.06);
+}
+.lane:first-child{border:0}
+.blk{
+  position:absolute;height:9%;image-rendering:pixelated;
+  box-shadow:3px 3px 0 var(--outline);
+}
+.blk.a{background:var(--note-a)}
+.blk.b{background:var(--note-b)}
+.cursor{
+  position:absolute;top:0;bottom:0;width:3px;background:var(--amber);
+  box-shadow:0 0 0 2px var(--outline), 0 0 10px var(--amber);
+}
+.bar{
+  margin-top:12px;height:14px;background:var(--outline);
+  border:3px solid var(--panel);position:relative;
+}
+.bar i{
+  position:absolute;inset:2px;width:58%;background:var(--note-a);
+  box-shadow:inset 0 0 0 1px var(--outline);
+  background-image:repeating-linear-gradient(90deg,var(--outline) 0 2px,transparent 2px 8px);
+}
+
+.keys{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:1.7rem}
+.key{
+  height:44px;background:var(--panel);
+  border:3px solid var(--outline);box-shadow:3px 3px 0 var(--outline);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.62rem;color:var(--amber);
+}
+
+.roster{display:flex;justify-content:space-between;gap:8px;margin-top:1.8rem;
+  font-size:.56rem;line-height:1.6;}
+.p{background:var(--panel);border:2px solid var(--outline);padding:.5rem .6rem;flex:1;
+  box-shadow:3px 3px 0 var(--outline);}
+.p b{display:block;color:var(--amber);font-size:.62rem;margin-bottom:.2rem}
+.p.turn{border-color:var(--note-b);box-shadow:3px 3px 0 var(--note-b)}
+
+/* -------------------------------------------------------------------------
+   Legenda tokena — vidljiva na stranici radi lakšeg prenošenja boja u kod.
+   Izbaciti iz stvarnog UI-ja; postoji samo u ovom referentnom fajlu.
+   ------------------------------------------------------------------------- */
+.legend{
+  max-width:780px;margin:2.4rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+  gap:.6rem;font-family:var(--font-mono);font-size:1.05rem;color:var(--ink-soft);
+}
+.swatch{display:flex;align-items:center;gap:.5rem;background:var(--panel);
+  border:2px solid var(--outline);padding:.4rem .55rem}
+.swatch i{width:18px;height:18px;border:2px solid var(--outline);flex:none}
+</style>
+</head>
+<body>
+  <div class="frame">
+    <div class="top">
+      <div class="room">SOBA #7K2Q</div>
+      <div class="score">RUNDA 04/12</div>
+    </div>
+    <h1>MUSIC MEMORY DUEL</h1>
+    <p class="sub">PONOVI MELODIJU · +2 TAČNO · +3 JEDINI TAČAN</p>
+    <div class="crt">
+      <div class="screen">
+        <div class="lane" style="top:0"></div><div class="lane" style="top:12.5%"></div>
+        <div class="lane" style="top:25%"></div><div class="lane" style="top:37.5%"></div>
+        <div class="lane" style="top:50%"></div><div class="lane" style="top:62.5%"></div>
+        <div class="lane" style="top:75%"></div><div class="lane" style="top:87.5%"></div>
+        <div class="blk a" style="left:6%;top:63%;width:9%"></div>
+        <div class="blk b" style="left:20%;top:38%;width:9%"></div>
+        <div class="blk a" style="left:34%;top:38%;width:9%"></div>
+        <div class="blk b" style="left:48%;top:13%;width:9%"></div>
+        <div class="blk a" style="left:62%;top:50%;width:9%"></div>
+        <div class="cursor" style="left:58%"></div>
+      </div>
+      <div class="bar"><i></i></div>
+    </div>
+    <div class="keys">
+      <div class="key">1</div><div class="key">2</div><div class="key">3</div><div class="key">4</div>
+      <div class="key">5</div><div class="key">6</div><div class="key">7</div><div class="key">8</div>
+    </div>
+    <div class="roster">
+      <div class="p turn">▶ TI<b>7</b></div>
+      <div class="p">ANA<b>4</b></div>
+      <div class="p">MARKO<b>9</b></div>
+      <div class="p">JELENA<b>2</b></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="swatch"><i style="background:#2A1345"></i>--bg-1</div>
+    <div class="swatch"><i style="background:#160821"></i>--bg-2</div>
+    <div class="swatch"><i style="background:#0B0414"></i>--bg-3</div>
+    <div class="swatch"><i style="background:#1F0E33"></i>--panel</div>
+    <div class="swatch"><i style="background:#050308"></i>--screen</div>
+    <div class="swatch"><i style="background:#FF3E7A"></i>--note-a</div>
+    <div class="swatch"><i style="background:#3ADFC7"></i>--note-b</div>
+    <div class="swatch"><i style="background:#FFC93C"></i>--amber</div>
+    <div class="swatch"><i style="background:#F4EEFF"></i>--ink</div>
+    <div class="swatch"><i style="background:#B9A7E0"></i>--ink-soft</div>
+  </div>
+</body>
+</html>

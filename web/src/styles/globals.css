@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+/*
+  Design tokens — extracted from mmd-visual-style-final.html.
+  Defined via Tailwind v4 @theme, so every --color-* and --font-*
+  automatically becomes a utility class too (e.g. --color-amber -> bg-amber/text-amber,
+  --font-display -> font-display), not just a plain CSS variable.
+*/
+@theme {
+  --color-bg-1: #2a1345;
+  --color-bg-2: #160821;
+  --color-bg-3: #0b0414;
+
+  --color-panel: #1f0e33;
+  --color-screen: #050308;
+
+  --color-note-a: #ff3e7a;
+  --color-note-b: #3adfc7;
+  --color-amber: #ffc93c;
+
+  --color-ink: #f4eeff;
+  --color-ink-soft: #b9a7e0;
+
+  --color-outline: #000000;
+
+  --font-display: "Press Start 2P", monospace;
+  --font-mono: "VT323", monospace;
+}
+
+body {
+  font-family: var(--font-mono);
+  color: var(--color-ink);
+  background:
+    radial-gradient(circle at 50% -10%, var(--color-bg-1), var(--color-bg-2) 55%),
+    var(--color-bg-3);
+  min-height: 100vh;
+}
+
+/*
+  Recurring "pixel" elements (style principle: sharp edges, hard offset
+  shadow, no blur — see mmd-visual-style-final.html). These are primitives,
+  not components — reused across multiple files (Lobby, RoomPage, and later
+  Keyboard/PianoRoll).
+*/
+.pixel-panel {
+  background: var(--color-panel);
+  border: 3px solid var(--color-outline);
+  box-shadow: 3px 3px 0 var(--color-outline);
+}
+
+.pixel-input {
+  background: var(--color-screen);
+  color: var(--color-ink);
+  border: 3px solid var(--color-outline);
+  font-family: var(--font-mono);
+}
+
+.pixel-button {
+  font-family: var(--font-display);
+  background: var(--color-panel);
+  color: var(--color-amber);
+  border: 3px solid var(--color-outline);
+  box-shadow: 3px 3px 0 var(--color-outline);
+}
+.pixel-button:active:not(:disabled) {
+  box-shadow: 0 0 0 var(--color-outline);
+  transform: translate(3px, 3px);
+}
+.pixel-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pixel-button--accent {
+  border-color: var(--color-note-b);
+  box-shadow: 3px 3px 0 var(--color-note-b);
+}
+.pixel-button--accent:active:not(:disabled) {
+  box-shadow: 0 0 0 var(--color-note-b);
+}
+
+/* Signature double text-shadow — ONLY for the main title/logo (principle 5). */
+.text-shadow-signature {
+  text-shadow: 3px 3px 0 var(--color-note-a), -3px -3px 0 var(--color-note-b);
+}

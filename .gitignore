@@ -1,0 +1,19 @@
+# .NET
+server/bin/
+server/obj/
+server.tests/bin/
+server.tests/obj/
+*.user
+
+# Visual Studio
+.vs/
+
+# Node / web
+web/node_modules/
+web/dist/
+
+# Editor
+.vscode/
+
+# Private project notes
+CLAUDE.md
