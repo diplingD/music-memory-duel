@@ -1,11 +1,15 @@
+using Microsoft.AspNetCore.SignalR;
 using Server.Hubs;
+using Server.Middleware;
 using Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 const string WebClientCorsPolicy = "WebClient";
 
-builder.Services.AddSignalR();
+var rateLimitFilter = new RateLimitMiddleware();
+builder.Services.AddSingleton(rateLimitFilter);
+builder.Services.AddSignalR(options => options.AddFilter(rateLimitFilter));
 builder.Services.AddControllers();
 builder.Services.AddSingleton<Scheduler>();
 builder.Services.AddSingleton<EffectExecutor>();
