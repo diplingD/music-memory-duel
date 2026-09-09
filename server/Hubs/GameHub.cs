@@ -3,6 +3,7 @@ using Server.Core.DTOs;
 using Server.Core.Game;
 using Server.Core.Models;
 using Server.Services;
+using Server.Validators;
 
 namespace Server.Hubs;
 
@@ -56,6 +57,8 @@ public sealed class GameHub(RoomRegistry rooms) : Hub<IGameClient>
 
     public async Task SubmitSequence(NoteEvent[] notes)
     {
+        if (!SubmissionValidator.IsValid(notes)) return;
+
         var (roomCode, playerId) = Context.RequirePlayer();
         var room = rooms.TryGet(roomCode) ?? throw new HubException("Room not found");
 
@@ -64,6 +67,8 @@ public sealed class GameHub(RoomRegistry rooms) : Hub<IGameClient>
 
     public async Task SubmitAnswer(Guid roundId, NoteEvent[] notes)
     {
+        if (!SubmissionValidator.IsValid(notes)) return;
+
         var (roomCode, playerId) = Context.RequirePlayer();
         var room = rooms.TryGet(roomCode) ?? throw new HubException("Room not found");
 
