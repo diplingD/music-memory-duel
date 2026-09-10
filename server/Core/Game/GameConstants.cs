@@ -12,6 +12,7 @@ public static class GameConstants
 
     public const int MinNotes = 1;
     public const int MaxNotes = 100;
+    public const int MinNoteIntervalMs = 50; // plausibility floor
 
     public const int MinPlayers = 2;
     public const int RoundsPerPlayer = 3;

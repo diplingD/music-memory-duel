@@ -198,12 +198,14 @@ public static class Reducer
 
         var composerAttempt = round.Answers.GetValueOrDefault(round.ComposerId);
         var composerConfirmed = composerAttempt is not null
+            && HumanTiming.IsHumanTiming(round.TargetNotes, composerAttempt)
             && NoteComparer.IsMatch(round.TargetNotes, composerAttempt, GameConstants.RhythmTolerance);
 
         var solverIds = state.Players.Select(p => p.Id).Where(id => id != round.ComposerId).ToArray();
         var solverCorrectness = solverIds.ToDictionary(
             id => id,
             id => round.Answers.TryGetValue(id, out var attempt)
+                && HumanTiming.IsHumanTiming(round.TargetNotes, attempt)
                 && NoteComparer.IsMatch(round.TargetNotes, attempt, GameConstants.RhythmTolerance));
 
         var (composerPoints, solverPoints) = Scoring.Score(composerConfirmed, solverCorrectness);
@@ -251,6 +253,7 @@ public static class Reducer
     {
         var submitted = attempt is not null;
         var reason = !submitted ? "timeout"
+            : !HumanTiming.IsHumanTiming(round.TargetNotes, attempt!) ? "implausible_timing"
             : !NoteComparer.SameLength(round.TargetNotes, attempt!) ? "wrong_length"
             : !NoteComparer.SamePitches(round.TargetNotes, attempt!) ? "wrong_pitch"
             : !correct ? "wrong_rhythm"
