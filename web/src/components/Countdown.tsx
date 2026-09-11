@@ -2,19 +2,19 @@ import { useEffect, useState } from 'react'
 
 interface CountdownProps {
   deadlineUnixMs: number
+  clockOffsetMs?: number // this client's clock offset from the server (SPEC 5.4) - default 0 until synced
 }
 
-// Local countdown from an absolute deadline. No clock-offset sync yet (that's 5.4 in SPEC.md) —
-// this trusts the browser's own clock for now.
-export default function Countdown({ deadlineUnixMs }: CountdownProps) {
-  const [remainingMs, setRemainingMs] = useState(() => Math.max(0, deadlineUnixMs - Date.now()))
+export default function Countdown({ deadlineUnixMs, clockOffsetMs = 0 }: CountdownProps) {
+  const estimatedServerNow = () => Date.now() + clockOffsetMs
+  const [remainingMs, setRemainingMs] = useState(() => Math.max(0, deadlineUnixMs - estimatedServerNow()))
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setRemainingMs(Math.max(0, deadlineUnixMs - Date.now()))
+    const interval = setInterval(() => {    // setInterval will run setRemainingMs every 100ms, until new useEffect is being triggered again
+      setRemainingMs(Math.max(0, deadlineUnixMs - estimatedServerNow()))
     }, 100)
-    return () => clearInterval(interval)
-  }, [deadlineUnixMs])
+    return () => clearInterval(interval)    // React runs this before this useEffect is executed again
+  }, [deadlineUnixMs, clockOffsetMs])
 
   const seconds = Math.ceil(remainingMs / 1000)
 

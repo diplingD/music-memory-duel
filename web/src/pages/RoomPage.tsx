@@ -16,6 +16,7 @@ import {
 } from '../api/gameHub'
 import type { NoteEvent, PlayerDto, RoundEndedDto, StandingDto } from '../models/contracts'
 import { SequenceCapture } from '../services/capture'
+import { syncClock } from '../services/clock'
 import { playNote } from '../services/synth'
 import Lobby from '../components/Lobby'
 import Keyboard from '../components/Keyboard'
@@ -40,6 +41,7 @@ export default function RoomPage() {
   const [lastRoundResult, setLastRoundResult] = useState<RoundEndedDto | null>(null)
   const [finalStandings, setFinalStandings] = useState<StandingDto[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [clockOffsetMs, setClockOffsetMs] = useState(0)
   const captureRef = useRef(new SequenceCapture())
   const answerCaptureRef = useRef(new SequenceCapture())
 
@@ -85,6 +87,7 @@ export default function RoomPage() {
       const result = await createRoom(nick)
       setRoomCode(result.roomCode)
       setPlayerId(result.playerId)
+      syncClock().then(setClockOffsetMs).catch((err) => setError((err as Error).message))
     } catch (err) {
       setError((err as Error).message)
     }
@@ -96,6 +99,7 @@ export default function RoomPage() {
       const result = await joinRoom(code, nick)
       setRoomCode(code)
       setPlayerId(result.playerId)
+      syncClock().then(setClockOffsetMs).catch((err) => setError((err as Error).message))
     } catch (err) {
       setError((err as Error).message)
     }
@@ -190,7 +194,7 @@ export default function RoomPage() {
           <PhaseBanner
             text={isComposer ? 'COMPOSE THE MELODY' : 'LISTEN TO THE MELODY'}
           />
-          <Countdown deadlineUnixMs={composeDeadline} />
+          <Countdown deadlineUnixMs={composeDeadline} clockOffsetMs={clockOffsetMs} />
           <PianoRoll notes={liveNotes} />
           {isComposer ? (
             <>
@@ -214,7 +218,7 @@ export default function RoomPage() {
       {phase === 'solving' && solveDeadline !== null && (
         <div className="flex w-full max-w-2xl flex-col items-center gap-4">
           <PhaseBanner text="YOUR TURN - REPEAT THE MELODY" />
-          <Countdown deadlineUnixMs={solveDeadline} />
+          <Countdown deadlineUnixMs={solveDeadline} clockOffsetMs={clockOffsetMs} />
           <Keyboard onPress={handleAnswerKeyPress} />
           <button
             type="button"
@@ -230,7 +234,10 @@ export default function RoomPage() {
       {phase === 'roundResult' && lastRoundResult && (
         <div className="flex w-full max-w-2xl flex-col items-center gap-4">
           <PhaseBanner text="NEXT ROUND IN" />
-          <Countdown deadlineUnixMs={lastRoundResult.resultDisplayDeadlineUnixMs} />
+          <Countdown
+            deadlineUnixMs={lastRoundResult.resultDisplayDeadlineUnixMs}
+            clockOffsetMs={clockOffsetMs}
+          />
 
           {(() => {
             const myResult = lastRoundResult.results.find((r) => r.playerId === playerId)
