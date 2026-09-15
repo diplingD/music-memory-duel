@@ -12,5 +12,6 @@ public interface IGameClient
     Task SolvingStarted(Guid roundId, long solveDeadlineUnixMs);
     Task RoundEnded(RoundEndedDto dto);
     Task MatchEnded(StandingDto[] finalStandings);
+    Task RoomState(RoomSnapshotDto dto);
     Task ErrorOccurred(string code, string message);
 }

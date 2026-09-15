@@ -4,6 +4,7 @@ import type {
   JoinRoomResult,
   NoteEvent,
   PlayerDto,
+  RoomSnapshotDto,
   RoundEndedDto,
   StandingDto,
 } from '../models/contracts'
@@ -12,6 +13,11 @@ const HUB_URL = 'http://localhost:5149/hubs/game'
 
 let connection: HubConnection | null = null
 let startPromise: Promise<HubConnection> | null = null
+
+// Remembered so we can auto-rejoin after SignalR's automatic reconnect
+let currentRoomCode: string | null = null
+let currentPlayerId: string | null = null
+let currentPlayerToken: string | null = null
 
 export function getConnection(): Promise<HubConnection> {
   if (connection) return Promise.resolve(connection)
@@ -22,6 +28,14 @@ export function getConnection(): Promise<HubConnection> {
     .withAutomaticReconnect()
     .configureLogging(LogLevel.Information)
     .build()
+
+  conn.onreconnected(() => {
+    if (currentRoomCode && currentPlayerId && currentPlayerToken) {
+      conn.invoke('Rejoin', currentRoomCode, currentPlayerId, currentPlayerToken).catch(() => {
+        // best-effort — if this fails the player just stays visibly disconnected until they refresh
+      })
+    }
+  })
 
   startPromise = conn.start().then(() => {
     connection = conn
@@ -38,12 +52,20 @@ export async function ping(): Promise<number> {
 
 export async function createRoom(nick: string): Promise<CreateRoomResult> {
   const conn = await getConnection()
-  return conn.invoke<CreateRoomResult>('CreateRoom', nick)
+  const result = await conn.invoke<CreateRoomResult>('CreateRoom', nick)
+  currentRoomCode = result.roomCode
+  currentPlayerId = result.playerId
+  currentPlayerToken = result.playerToken
+  return result
 }
 
 export async function joinRoom(roomCode: string, nick: string): Promise<JoinRoomResult> {
   const conn = await getConnection()
-  return conn.invoke<JoinRoomResult>('JoinRoom', roomCode, nick)
+  const result = await conn.invoke<JoinRoomResult>('JoinRoom', roomCode, nick)
+  currentRoomCode = roomCode
+  currentPlayerId = result.playerId
+  currentPlayerToken = result.playerToken
+  return result
 }
 
 export async function startMatch(): Promise<void> {
@@ -122,4 +144,10 @@ export async function onErrorOccurred(
 ): Promise<void> {
   const conn = await getConnection()
   conn.on('ErrorOccurred', callback)
+}
+
+// triggers when 'RoomState' is sent from backend — a snapshot sent ONLY to us, after Rejoin
+export async function onRoomState(callback: (dto: RoomSnapshotDto) => void): Promise<void> {
+  const conn = await getConnection()
+  conn.on('RoomState', callback)
 }

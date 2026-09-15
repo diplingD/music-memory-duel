@@ -16,27 +16,58 @@ public sealed class GameHub(RoomRegistry rooms) : Hub<IGameClient>
     {
         var room = rooms.CreateRoom();
         var playerId = Guid.NewGuid().ToString("N");
+        var playerToken = Guid.NewGuid().ToString("N");
 
         // Context.ConnectionId - unique id set by SingalR for specific WebSocket connection (one browser tab - one new id)
         await Groups.AddToGroupAsync(Context.ConnectionId, room.RoomCode);
         Context.SetPlayer(room.RoomCode, playerId);     // save user for current ConnectionId - so we can use it later (in StartMatch)
 
-        await room.PostAsync(new PlayerJoined(playerId, nick, Context.ConnectionId));
+        await room.PostAsync(new PlayerJoined(playerId, nick, Context.ConnectionId, playerToken));
 
-        return new CreateRoomResult(room.RoomCode, playerId);
+        return new CreateRoomResult(room.RoomCode, playerId, playerToken);
     }
 
     public async Task<JoinRoomResult> JoinRoom(string roomCode, string nick)
     {
         var room = rooms.TryGet(roomCode) ?? throw new HubException("Room not found");
         var playerId = Guid.NewGuid().ToString("N");
+        var playerToken = Guid.NewGuid().ToString("N");
 
         await Groups.AddToGroupAsync(Context.ConnectionId, room.RoomCode);
         Context.SetPlayer(room.RoomCode, playerId);
 
-        await room.PostAsync(new PlayerJoined(playerId, nick, Context.ConnectionId));
+        await room.PostAsync(new PlayerJoined(playerId, nick, Context.ConnectionId, playerToken));
 
-        return new JoinRoomResult(playerId);
+        return new JoinRoomResult(playerId, playerToken);
+    }
+
+    // Called after a dropped connection re-establishes (SignalR always assigns a NEW ConnectionId on reconnect).
+    // Token is verified BEFORE trusting this connection with someone's identity — otherwise
+    // anyone who saw a playerId via PlayerListChanged could hijack that player's identity.
+    public async Task Rejoin(string roomCode, string playerId, string playerToken)
+    {
+        var room = rooms.TryGet(roomCode) ?? throw new HubException("Room not found");
+
+        if (!room.TryGetPlayerToken(playerId, out var expectedToken) || expectedToken != playerToken)
+            throw new HubException("Invalid rejoin credentials");
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, roomCode);
+        Context.SetPlayer(roomCode, playerId);
+
+        await room.PostAsync(new PlayerReconnected(playerId, playerToken, Context.ConnectionId));
+    }
+
+    // SignalR automatically calls this every time WebSocket connection drops
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        if (Context.TryGetPlayer(out var roomCode, out var playerId))
+        {
+            var room = rooms.TryGet(roomCode);
+            if (room is not null)
+                await room.PostAsync(new PlayerDisconnected(playerId));
+        }
+
+        await base.OnDisconnectedAsync(exception);
     }
 
     public async Task StartMatch()

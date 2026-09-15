@@ -12,6 +12,15 @@ public static class Reducer
             case PlayerJoined playerJoined:
                 return HandlePlayerJoined(state, playerJoined);
 
+            case PlayerDisconnected playerDisconnected:
+                return HandlePlayerDisconnected(state, playerDisconnected, utcNow);
+
+            case PlayerReconnected playerReconnected:
+                return HandlePlayerReconnected(state, playerReconnected);
+
+            case ComposeDeadlineReached composeDeadlineReached:
+                return HandleComposeDeadlineReached(state, composeDeadlineReached, utcNow);
+
             case MatchStartRequested:
                 return HandleMatchStartRequested(state, utcNow);
 
@@ -40,13 +49,100 @@ public static class Reducer
         if (state.Phase != Phase.Lobby)
             return (state, []);
 
-        var player = new Player { Id = evt.PlayerId, Nick = evt.Nick, ConnectionId = evt.ConnectionId };
+        var player = new Player { Id = evt.PlayerId, Nick = evt.Nick, ConnectionId = evt.ConnectionId, Token = evt.Token };
         IReadOnlyList<Player> updatedPlayers = [.. state.Players, player];
 
         var updatedState = state with { Players = updatedPlayers };     // state - but with updated 'Players' field
         var effects = new List<Effect> { new PlayerListChangedEffect(updatedPlayers) };
 
         return (updatedState, effects);
+    }
+
+    // Disconnect never removes the player
+    // If the composer vanishes mid-Composing, void that turn immediately instead of leaving the room stuck forever
+    private static (GameState, IReadOnlyList<Effect>) HandlePlayerDisconnected(GameState state, PlayerDisconnected evt, DateTime utcNow)
+    {
+        var player = state.Players.FirstOrDefault(p => p.Id == evt.PlayerId);
+        if (player is null || !player.IsConnected)
+            return (state, []); // unknown player, or already marked — ignore
+
+        var updatedPlayers = WithPlayerConnection(state.Players, evt.PlayerId, isConnected: false, newConnectionId: null);
+        var updatedState = state with { Players = updatedPlayers };
+        List<Effect> effects = [new PlayerListChangedEffect(updatedPlayers)];
+
+        if (state.Phase == Phase.Composing && evt.PlayerId == CurrentComposerId(state))
+        {
+            var (afterVoid, voidEffects) = VoidComposingRoundAndAdvance(updatedState, utcNow);
+            return (afterVoid, [.. effects, .. voidEffects]);
+        }
+
+        return (updatedState, effects);
+    }
+
+    private static (GameState, IReadOnlyList<Effect>) HandlePlayerReconnected(GameState state, PlayerReconnected evt)
+    {
+        var player = state.Players.FirstOrDefault(p => p.Id == evt.PlayerId && p.Token == evt.PlayerToken);
+        if (player is null)
+            return (state, []); // unknown player or bad token — Hub already checks this too, defense in depth
+
+        var updatedPlayers = WithPlayerConnection(state.Players, evt.PlayerId, isConnected: true, evt.NewConnectionId);
+        var updatedState = state with { Players = updatedPlayers };
+
+        var composerId = updatedState.Phase is Phase.Composing or Phase.Solving
+            ? CurrentComposerId(updatedState)
+            : null;
+
+        List<Effect> effects =
+        [
+            new PlayerListChangedEffect(updatedPlayers),
+            new RoomSnapshotEffect(
+                evt.NewConnectionId,
+                updatedState.Phase,
+                updatedPlayers,
+                composerId,
+                updatedState.CurrentRound?.RoundId,
+                updatedState.CurrentPhaseDeadlineUtc),
+        ];
+
+        return (updatedState, effects);
+    }
+
+    private static IReadOnlyList<Player> WithPlayerConnection(IReadOnlyList<Player> players, string playerId, bool isConnected, string? newConnectionId) 
+        => players
+            .Select(p => p.Id != playerId ? p : new Player
+            {
+                Id = p.Id,
+                Nick = p.Nick,
+                ConnectionId = newConnectionId != null ? newConnectionId : p.ConnectionId,
+                Token = p.Token,
+                Score = p.Score,
+                IsConnected = isConnected,
+            })
+            .ToList();
+
+    private static (GameState, IReadOnlyList<Effect>) VoidComposingRoundAndAdvance(GameState state, DateTime utcNow)
+    {
+        var roundsPlayed = state.RoundsPlayed + 1;
+        if (roundsPlayed >= state.TotalRounds)
+            return EnterMatchOver(state with { RoundsPlayed = roundsPlayed });
+
+        var nextIndex = (state.ComposerIndex + 1) % state.Players.Count;
+        var updatedState = state with { ComposerIndex = nextIndex, RoundsPlayed = roundsPlayed };
+        return EnterComposing(updatedState, utcNow);
+    }
+
+    // The composer never submitted anything before their time ran out (SPEC 4.7: "Kreator pošalje
+    // 0 nota" is already filtered out earlier by SubmissionValidator, so it never creates a Round —
+    // it just falls through to this same natural timeout). RoundsPlayed is this Composing session's
+    // "generation number" — if it doesn't match anymore, a round already closed/voided since this
+    // deadline was scheduled (same stale-event problem as SolveDeadlineReached), so ignore it.
+    private static (GameState, IReadOnlyList<Effect>) HandleComposeDeadlineReached(
+        GameState state, ComposeDeadlineReached evt, DateTime utcNow)
+    {
+        if (state.Phase != Phase.Composing || evt.RoundsPlayed != state.RoundsPlayed)
+            return (state, []);
+
+        return VoidComposingRoundAndAdvance(state, utcNow);
     }
 
     private static (GameState, IReadOnlyList<Effect>) HandleMatchStartRequested(GameState state, DateTime utcNow)
@@ -66,11 +162,11 @@ public static class Reducer
     {
         var composerId = CurrentComposerId(state);
         var deadline = utcNow.AddMilliseconds(GameConstants.ComposeMaxMs);
-        var updatedState = state with { Phase = Phase.Composing };
+        var updatedState = state with { Phase = Phase.Composing, CurrentPhaseDeadlineUtc = deadline };
         List<Effect> effects =
         [
             new MatchStartedEffect(deadline, composerId),
-            new ScheduleEffect(deadline, new ComposeDeadlineReached()),
+            new ScheduleEffect(deadline, new ComposeDeadlineReached(state.RoundsPlayed)),
         ];
 
         return (updatedState, effects);
@@ -120,7 +216,7 @@ public static class Reducer
             Answers = new Dictionary<string, IReadOnlyList<NoteEvent>>(),
         };
 
-        var updatedState = state with { Phase = Phase.Solving, CurrentRound = round };
+        var updatedState = state with { Phase = Phase.Solving, CurrentRound = round, CurrentPhaseDeadlineUtc = solveDeadline };
         List<Effect> effects =
         [
             new SolvingStartedEffect(round.RoundId, solveDeadline),
@@ -184,7 +280,7 @@ public static class Reducer
 
     private static (GameState, IReadOnlyList<Effect>) EnterMatchOver(GameState state)
     {
-        var updatedState = state with { Phase = Phase.MatchOver };
+        var updatedState = state with { Phase = Phase.MatchOver, CurrentPhaseDeadlineUtc = null };
         List<Effect> effects = [new MatchEndedEffect(state.Players)];
 
         return (updatedState, effects);
@@ -227,7 +323,9 @@ public static class Reducer
                 Id = p.Id,
                 Nick = p.Nick,
                 ConnectionId = p.ConnectionId,
+                Token = p.Token,
                 Score = p.Score + pointsById[p.Id],
+                IsConnected = p.IsConnected,
             })
             .ToList();
 
@@ -238,6 +336,7 @@ public static class Reducer
             Players = updatedPlayers,
             CurrentRound = null,
             RoundsPlayed = state.RoundsPlayed + 1,
+            CurrentPhaseDeadlineUtc = resultDisplayDeadline,
         };
         List<Effect> effects =
         [

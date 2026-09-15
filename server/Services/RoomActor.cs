@@ -6,7 +6,7 @@ namespace Server.Services;
 
 public sealed class RoomActor : IAsyncDisposable
 {
-    private readonly Channel<GameEvent> _inbox = Channel.CreateUnbounded<GameEvent>();
+    private readonly Channel<GameEvent> _inbox = Channel.CreateUnbounded<GameEvent>();      // garanties FIFO
     private readonly EffectExecutor _effects;
     private readonly Task _loop;
     private GameState _state;
@@ -14,6 +14,13 @@ public sealed class RoomActor : IAsyncDisposable
     public string RoomCode { get; }
 
     public string HostId => _state.Players.Count > 0 ? _state.Players[0].Id : "";
+
+    public bool TryGetPlayerToken(string playerId, out string? token)
+    {
+        var player = _state.Players.FirstOrDefault(p => p.Id == playerId);
+        token = player?.Token;
+        return player is not null;
+    }
 
     public RoomActor(string roomCode, EffectExecutor effects)
     {
@@ -27,7 +34,7 @@ public sealed class RoomActor : IAsyncDisposable
 
     private async Task RunAsync()       // non-stop running thread
     {
-        // only this can change _state — that's why we dont need lock
+        // only in this file _state can be changed — that's why we dont need lock
         await foreach (var evt in _inbox.Reader.ReadAllAsync())
         {
             var (nextState, effects) = Reducer.Reduce(_state, evt, DateTime.UtcNow);

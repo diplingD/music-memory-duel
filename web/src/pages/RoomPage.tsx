@@ -7,6 +7,7 @@ import {
   onMatchStarted,
   onNotePlayed,
   onPlayerListChanged,
+  onRoomState,
   onRoundEnded,
   onSolvingStarted,
   sendNotePlayed,
@@ -79,6 +80,34 @@ export default function RoomPage() {
     onErrorOccurred((_code, message) => setError(message)).catch((err) =>
       setError((err as Error).message),
     )
+    onRoomState((dto) => {
+      setPlayers(dto.players)
+      setComposerId(dto.composerId)
+      if (dto.roundId !== null) setRoundId(dto.roundId)
+
+      switch (dto.phase) {
+        case 'Lobby':
+          setPhase('lobby')
+          break
+        case 'Composing':
+          if (dto.phaseDeadlineUnixMs !== null) setComposeDeadline(dto.phaseDeadlineUnixMs)
+          setPhase('composing')
+          break
+        case 'Solving':
+          if (dto.phaseDeadlineUnixMs !== null) setSolveDeadline(dto.phaseDeadlineUnixMs)
+          setPhase('solving')
+          break
+        case 'RoundResult':
+          // no per-round result detail in the snapshot (short 5s window) — display just
+          // catches up once the next real event (ResultDisplayFinished) moves things along
+          setPhase('roundResult')
+          break
+        case 'MatchOver':
+          setFinalStandings(dto.standings)
+          setPhase('matchOver')
+          break
+      }
+    }).catch((err) => setError((err as Error).message))
   }, [])
 
   async function handleCreate(nick: string) {
@@ -172,6 +201,9 @@ export default function RoomPage() {
               <div key={p.id} className="pixel-panel min-w-[120px] flex-1 px-3 py-2 text-center">
                 <div className="font-display text-[0.6rem] text-amber">{p.nick}</div>
                 {p.isHost && <div className="mt-1 text-[0.6rem] text-ink-soft">HOST</div>}
+                {!p.isConnected && (
+                  <div className="mt-1 text-[0.6rem] text-note-a">DISCONNECTED</div>
+                )}
               </div>
             ))}
           </div>

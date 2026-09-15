@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.SignalR;
 using Server.Hubs;
 using Server.Middleware;
@@ -9,7 +10,8 @@ const string WebClientCorsPolicy = "WebClient";
 
 var rateLimitFilter = new RateLimitMiddleware();
 builder.Services.AddSingleton(rateLimitFilter);
-builder.Services.AddSignalR(options => options.AddFilter(rateLimitFilter));
+builder.Services.AddSignalR(options => options.AddFilter(rateLimitFilter))
+    .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddControllers();
 builder.Services.AddSingleton<Scheduler>();
 builder.Services.AddSingleton<EffectExecutor>();

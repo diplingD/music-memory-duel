@@ -1,3 +1,3 @@
 namespace Server.Core.DTOs;
 
-public record PlayerDto(string Id, string Nick, bool IsHost);
+public record PlayerDto(string Id, string Nick, bool IsHost, bool IsConnected);

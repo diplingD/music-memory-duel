@@ -8,4 +8,5 @@ public sealed record GameState
     public int ComposerIndex { get; init; }     // index into Players (join order) for round-robin rotation
     public int TotalRounds { get; init; }       // fixed at match start: Players.Count * GameConstants.RoundsPerPlayer
     public int RoundsPlayed { get; init; }
+    public DateTime? CurrentPhaseDeadlineUtc { get; init; }     // null in Lobby/MatchOver; lets a reconnecting player learn the deadline without recomputing it
 }

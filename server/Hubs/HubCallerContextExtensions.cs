@@ -27,4 +27,23 @@ public static class HubCallerContextExtensions
 
         return (roomCode, playerId);
     }
+
+    // Non-throwing variant for OnDisconnectedAsync — a connection that never joined a room
+    // (dropped before CreateRoom/JoinRoom/Rejoin completed) shouldn't blow up on disconnect.
+    public static bool TryGetPlayer(this HubCallerContext context, out string roomCode, out string playerId)
+    {
+        var hasRoomCode = context.Items.TryGetValue(RoomCodeKey, out var roomCodeValue);
+        var hasPlayerId = context.Items.TryGetValue(PlayerIdKey, out var playerIdValue);
+
+        if (!hasRoomCode || !hasPlayerId)
+        {
+            roomCode = "";
+            playerId = "";
+            return false;
+        }
+
+        roomCode = (string)roomCodeValue!;
+        playerId = (string)playerIdValue!;
+        return true;
+    }
 }

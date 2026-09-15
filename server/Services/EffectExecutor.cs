@@ -34,6 +34,9 @@ public sealed class EffectExecutor(IHubContext<GameHub, IGameClient> hub, Schedu
             case MatchEndedEffect matchEnded:
                 return BroadcastMatchEnded(matchEnded, actor);
 
+            case RoomSnapshotEffect roomSnapshot:
+                return SendRoomSnapshot(roomSnapshot, actor);
+
             case ScheduleEffect schedule:
                 return ScheduleWakeUp(schedule, actor);
 
@@ -44,11 +47,24 @@ public sealed class EffectExecutor(IHubContext<GameHub, IGameClient> hub, Schedu
 
     private Task BroadcastPlayerList(PlayerListChangedEffect effect, RoomActor actor)
     {
-        var players = effect.Players
-            .Select(p => new PlayerDto(p.Id, p.Nick, p.Id == actor.HostId))     // mapping each player to PlayerDto
-            .ToArray();
+        return hub.Clients.Group(actor.RoomCode).PlayerListChanged(BuildPlayerDtos(effect.Players, actor.HostId));
+    }
 
-        return hub.Clients.Group(actor.RoomCode).PlayerListChanged(players);
+    private static PlayerDto[] BuildPlayerDtos(IReadOnlyList<Player> players, string hostId) =>
+        players.Select(p => new PlayerDto(p.Id, p.Nick, p.Id == hostId, p.IsConnected)).ToArray();
+
+    private Task SendRoomSnapshot(RoomSnapshotEffect effect, RoomActor actor)
+    {
+        var players = BuildPlayerDtos(effect.Players, actor.HostId);
+        var standings = BuildStandings(effect.Players);
+        long? deadlineMs;
+        if (effect.CurrentPhaseDeadlineUtc.HasValue)
+            deadlineMs = new DateTimeOffset(effect.CurrentPhaseDeadlineUtc.Value).ToUnixTimeMilliseconds();
+        else
+            deadlineMs = null;
+
+        var dto = new RoomSnapshotDto(effect.Phase, players, effect.ComposerId, effect.RoundId, deadlineMs, standings);
+        return hub.Clients.Client(effect.ConnectionId).RoomState(dto);
     }
 
     private Task SendError(ErrorOccurred effect, RoomActor actor)
@@ -98,7 +114,7 @@ public sealed class EffectExecutor(IHubContext<GameHub, IGameClient> hub, Schedu
         return hub.Clients.Group(actor.RoomCode).MatchEnded(BuildStandings(effect.Players));
     }
 
-    // rank is 1-based, players sorted best-score-first
+    // players sorted best-score-first
     private static StandingDto[] BuildStandings(IReadOnlyList<Player> players) =>
         players
             .OrderByDescending(p => p.Score)

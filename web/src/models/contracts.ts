@@ -2,15 +2,29 @@ export interface PlayerDto {
   id: string
   nick: string
   isHost: boolean
+  isConnected: boolean
 }
 
 export interface CreateRoomResult {
   roomCode: string
   playerId: string
+  playerToken: string
 }
 
 export interface JoinRoomResult {
   playerId: string
+  playerToken: string
+}
+
+export type Phase = 'Lobby' | 'Composing' | 'Solving' | 'RoundResult' | 'MatchOver'
+
+export interface RoomSnapshotDto {
+  phase: Phase
+  players: PlayerDto[]
+  composerId: string | null
+  roundId: string | null
+  phaseDeadlineUnixMs: number | null
+  standings: StandingDto[]
 }
 
 export interface NoteEvent {

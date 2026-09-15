@@ -25,3 +25,12 @@ public sealed record RoundEndedEffect(
     DateTime ResultDisplayDeadlineUtc) : Effect;
 
 public sealed record MatchEndedEffect(IReadOnlyList<Player> Players) : Effect;
+
+// Sent to exactly one connection (the one that just rejoined), not broadcast to the room.
+public sealed record RoomSnapshotEffect(
+    string ConnectionId,
+    Phase Phase,
+    IReadOnlyList<Player> Players,
+    string? ComposerId,
+    Guid? RoundId,
+    DateTime? CurrentPhaseDeadlineUtc) : Effect;
