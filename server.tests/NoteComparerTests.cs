@@ -78,8 +78,10 @@ public class NoteComparerTests
     [Fact]
     public void LargeJitterOnOneInterval_ExceedsTolerance()
     {
+        // Normalization dilutes a single stretched interval, so the raw delay has to be well past the
+        // tolerance to fail: the first interval doubles, which is 60% off target once normalized.
         NoteEvent[] target = [new("C4", 0), new("D4", 200), new("E4", 400), new("F4", 600), new("G4", 800)];
-        NoteEvent[] attempt = [new("C4", 0), new("D4", 320), new("E4", 520), new("F4", 720), new("G4", 920)];
+        NoteEvent[] attempt = [new("C4", 0), new("D4", 400), new("E4", 600), new("F4", 800), new("G4", 1000)];
 
         Assert.False(NoteComparer.IsMatch(target, attempt, Tolerance));
     }
