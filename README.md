@@ -32,7 +32,7 @@ flowchart LR
 
 **How it works:**
 
-- **Game rules are one pure function (GameHub).** It takes the current state, what happened, and the current time. It returns the new state and a list of effects. It never sends a message, reads a clock, or touches a database.
+- **Game rules are one pure function (Reducer).** It takes the current state, what happened, and the current time. It returns the new state and a list of effects. It never sends a message, reads a clock, or touches a database.
 - **Effects are data, not actions.** The function does not broadcast anything; it returns *"send this message"* or *"wake me in 15 seconds"*. A separate runner performs them.
 - **xUnit tests.** Because of the two points above, all 11 scoring branches are tested by calling a function, instead of starting a server and waiting out real timers.
 - **One queue per room, no locks.** Every action in a room (a move, a timeout, a disconnect) enters the same queue and is handled one at a time. Two players acting in the same millisecond cannot corrupt the state, so there is no `lock` anywhere in the project.
@@ -42,14 +42,23 @@ flowchart LR
 
 ## Running locally
 
-**Backend** (`server/`), listens on `http://localhost:5149`:
+**With Docker** — one command, nothing else to install. The image builds the frontend and the backend and ships them as a single service:
+
+```bash
+docker build -t mmd .
+docker run --rm -p 8080:8080 mmd
+```
+
+Then open `http://localhost:8080`.
+
+**For development**, run the two parts separately. Backend (`server/`) on `http://localhost:5149`:
 
 ```bash
 cd server
 dotnet run
 ```
 
-**Frontend** (`web/`), listens on `http://localhost:5173`, CORS on the backend already allows this origin:
+Frontend (`web/`) on `http://localhost:5173`. Vite forwards `/hubs` to the backend, so the client's hub URL stays relative and the same code works in both setups:
 
 ```bash
 cd web
@@ -57,11 +66,11 @@ npm install
 npm run dev
 ```
 
-Open the frontend URL in two browser tabs (or two devices) to play a match against yourself.
+Either way, open the app in two browser tabs (or on two devices) to play a match against yourself.
 
 ## Game rules & scoring
 
-Each round: the composer plays a melody (up to 15s), everyone (including the composer) then has to reproduce it within a solve window. A sequence matches when both **pitch** (exact) and **rhythm**.
+Each round: the composer plays a melody (up to 15s), everyone (including the composer) then has to reproduce it within a solve window. A sequence matches when both **pitch** and **rhythm** line up: pitch exactly, rhythm within a tolerance. Intervals are scaled to the melody's total length, so playing the same melody a bit faster or slower still counts as correct.
 
 **Standard scoring (3+ players)**:
 
@@ -94,7 +103,7 @@ The server is authoritative: it owns every deadline, verifies every submission, 
 - **Rate limiting.** Each connection is capped at a generous number of Hub calls per 10-second window.
 - **Reconnect tokens.** Each player holds a private token (never broadcast to other players) that must match before a reconnect is allowed to resume that player's identity - knowing someone's public player ID alone isn't enough to "become" them.
 
-### Known limitations
+## Known limitations
 
 **Replay attacks can't be fully prevented.** The server has to send the composer's notes to every client so they can be played back. This means the correct answer exists in every client's memory at some point. A modified client can intercept that message over the WebSocket and echo the exact same notes back as its own answer, every time.
 

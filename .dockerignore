@@ -1,0 +1,8 @@
+# Never copy host build output or dependencies into the image — they are rebuilt inside it,
+# and host binaries (Windows) would not run on the container's Linux base anyway.
+**/node_modules
+**/bin
+**/obj
+web/dist
+.git
+.vs

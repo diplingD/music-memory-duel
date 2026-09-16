@@ -9,7 +9,7 @@ import type {
   StandingDto,
 } from '../models/contracts'
 
-const HUB_URL = 'http://localhost:5149/hubs/game'
+const HUB_URL = '/hubs/game'
 
 let connection: HubConnection | null = null
 let startPromise: Promise<HubConnection> | null = null
