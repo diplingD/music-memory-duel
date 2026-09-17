@@ -2,6 +2,9 @@
 
 Music Memory Duel is a 2–5 player online game: each round, one player (the **composer**) plays a short melody on an 8-key piano, and everyone else (the **solvers**) has to reproduce it (pitch and rhythm) before time runs out. The composer role rotates every round.
 
+**Try it: [music-memory-duel.onrender.com](https://music-memory-duel.onrender.com)**
+It runs on a free instance that sleeps after ~15 minutes of inactivity, so the first load can take up to a minute to wake up.
+
 ## Architecture
 
 Players connect over a **WebSocket** (SignalR), so the server can push updates at any moment instead of waiting to be asked. The server is authoritative: it owns the timers, checks every move, and computes every score.

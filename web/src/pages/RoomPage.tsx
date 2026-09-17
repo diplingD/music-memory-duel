@@ -143,6 +143,12 @@ export default function RoomPage() {
     }
   }
 
+  // A reload is the whole reset: React state, the hub connection and its remembered room all go
+  // at once, so the app comes back exactly as it does on a first visit.
+  function handleBackToHome() {
+    window.location.reload()
+  }
+
   function handleKeyPress(pitch: string) {
     playNote(pitch).catch((err) => setError((err as Error).message))
     const note = captureRef.current.record(pitch)
@@ -311,6 +317,13 @@ export default function RoomPage() {
         <div className="flex w-full max-w-2xl flex-col items-center gap-4">
           <PhaseBanner text="MATCH OVER" />
           <Scoreboard standings={finalStandings} />
+          <button
+            type="button"
+            onClick={handleBackToHome}
+            className="pixel-button pixel-button--accent px-4 py-3 text-[0.6rem]"
+          >
+            BACK TO HOME
+          </button>
         </div>
       )}
 
