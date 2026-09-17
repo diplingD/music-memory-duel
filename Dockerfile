@@ -20,4 +20,5 @@ WORKDIR /app
 COPY --from=server-build /app/publish ./
 COPY --from=web-build /src/web/dist ./wwwroot
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "server.dll"]
+# Hosting platforms hand the port over in PORT; fall back to 8080 so local runs are unchanged.
+ENTRYPOINT ["sh", "-c", "exec dotnet server.dll --urls http://+:${PORT:-8080}"]
