@@ -161,6 +161,12 @@ public static class Reducer
     private static (GameState, IReadOnlyList<Effect>) EnterComposing(GameState state, DateTime utcNow)
     {
         var composerId = CurrentComposerId(state);
+
+        // The composer may already be known-disconnected (e.g. they dropped a round or two ago)
+        var composer = state.Players.First(p => p.Id == composerId);
+        if (!composer.IsConnected)
+            return VoidComposingRoundAndAdvance(state, utcNow);
+
         var deadline = utcNow.AddMilliseconds(GameConstants.ComposeMaxMs);
         var updatedState = state with { Phase = Phase.Composing, CurrentPhaseDeadlineUtc = deadline };
         List<Effect> effects =

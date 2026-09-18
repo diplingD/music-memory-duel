@@ -1,19 +1,16 @@
 import * as Tone from 'tone'
 
 let synth: Tone.PolySynth | null = null
-let started = false
 
 function getSynth(): Tone.PolySynth {
   synth ??= new Tone.PolySynth(Tone.Synth).toDestination()
   return synth
 }
 
-// Tone.start() must run from a user gesture (autoplay policy) — safe to call on every
-// key press, it's a no-op after the first successful call.
+// Tone.start() must run from a user gesture (autoplay policy). Like turning on a keyboard to be played
 async function ensureAudioStarted(): Promise<void> {
-  if (started) return
+  if (Tone.getContext().state === 'running') return
   await Tone.start()
-  started = true
 }
 
 export async function playNote(pitch: string): Promise<void> {

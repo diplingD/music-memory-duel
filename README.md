@@ -5,6 +5,8 @@ Music Memory Duel is a 2–5 player online game: each round, one player (the **c
 **Try it: [music-memory-duel.onrender.com](https://music-memory-duel.onrender.com)**  
 It runs on a free instance that sleeps after ~15 minutes of inactivity, so the first load can take up to a minute to wake up.
 
+<u>*Note*</u>: if you are playing from your iPhone, make sure that your ringtone is turned on.
+
 ## Architecture
 
 Players connect over a **WebSocket** (SignalR), so the server can push updates at any moment instead of waiting to be asked. The server is authoritative: it owns the timers, checks every move, and computes every score.
